@@ -2,27 +2,18 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from sqlalchemy import create_engine
-from pathlib import Path
 import numpy as np
 
 
 def main():
-    cwd = Path.cwd()
-    dataframe_file = cwd / 'dataframe.pkl'
-    if not dataframe_file.is_file():
-        create_dataframe()
-    df = pd.read_pickle(dataframe_file)
+    df = create_dataframe()
     options = Options()
     options.headless = True
     with webdriver.Chrome(
             executable_path='/Users/MatteoZanoni/Desktop/Prove/chromedriver',
             options=options) as driver:
-        while df.todo.sum() > 0:
-            df.update(df[df.todo].head(5).apply(
-                lambda row: get_product(row, driver), axis=1))
-            print('saving partial results...')
-            df.to_pickle('dataframe.pkl')
+        df = df.apply(lambda row: get_product(row, driver), axis=1)
+        df.to_json('walmart_products.json', orient='records')
 
 
 def get_product(series, driver):
@@ -43,7 +34,7 @@ def get_product(series, driver):
             item = items[0]
             full_name = item.find(
                 'a', class_='product-title-link').get('title')
-            link = 'http://www.walmart.com' + \
+            link = 'http://www.walmart.com' +\
                 item.find('a', class_='product-title-link').get('href')
             price_unit = item.find(
                 'span', class_='price-characteristic').text
@@ -65,10 +56,8 @@ def get_product(series, driver):
 
 
 def create_dataframe():
-    engine = create_engine('postgresql://localhost:5432/prova')
-    query = "SELECT id, title FROM label WHERE category = "\
-            "'HUMAN OTC DRUG LABEL'"
-    df = pd.read_sql_query(query, con=engine)
+    df = pd.read_json(
+        '../unitn-kdi-201920-data-selection/labels.json', orient='records')
     df.rename({'title': 'original_name'}, inplace=True, axis=1)
     df['todo'] = True
     df['found'] = np.nan
@@ -76,7 +65,7 @@ def create_dataframe():
     df['price'] = np.nan
     df['rating'] = np.nan
     df['link'] = np.nan
-    df.to_pickle('dataframe.pkl')
+    return df
 
 
 if __name__ == "__main__":
